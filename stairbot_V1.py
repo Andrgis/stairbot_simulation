@@ -151,8 +151,8 @@ class StairBot(agxSDK.Assembly):
             j.setCompliance(1E-12)
             j.getMotor1D().setCompliance(1E-10)
             j.getMotor1D().setEnable(True)
-            j.getMotor1D().setSpeed(1.0)
-            j.getMotor1D().setForceRange(-1.0, 1.0)
+            j.getMotor1D().setSpeed(0.0)
+            j.getMotor1D().setForceRange(-2.0, 2.0)
             j.getLock1D().setEnable(False)
 
         for s in self.joints["wheelflaps"]:
@@ -222,25 +222,33 @@ class MyKeyboardEvent(agxSDK.GuiEventListener):
     def __init__(self, object: StairBot):
         super().__init__()
         self.obj = object
+        self.v = 0.0
 
     def keyboard(self, key, alt, x, y, down):
         handled = False
         if key == 65362: #up
+            self.v+=0.5
             for wheel in self.obj.joints["wheels"]:
-                wheel.getMotor1D().setSpeed(1.2)
-                handled = True
+                wheel.getMotor1D().setSpeed(self.v)
+            handled = True
         elif key == 65364: #down
+            self.v-=0.5
             for wheel in self.obj.joints["wheels"]:
-                wheel.getMotor1D().setSpeed(-1.2)
-                handled = True
+                wheel.getMotor1D().setSpeed(self.v)
+            handled = True
         elif key == 65361: #left
             for servo in self.obj.joints["wheelflaps"]:
                 self.obj.servo_pos -=0.1
                 servo.getLock1D().setPosition(self.obj.servo_pos)
-                handled = True
+            handled = True
         elif key == 65363: #right
             for servo in self.obj.joints["wheelflaps"]:
                 self.obj.servo_pos +=0.1
                 servo.getLock1D().setPosition(self.obj.servo_pos)
-                handled = True
+            handled = True
         return handled
+
+class Plotter_Z(agxSDK.GuiEventListener):
+    def __init__(self):
+        super().__init__()
+        pass
