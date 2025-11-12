@@ -5,6 +5,7 @@ import agxRender
 import agxCollide
 import math
 
+
 chassis_shape = agx_helper.load_shape('objects/simbot_simbot v1_chasis_1_Body1.obj')
 bogie_l_shape = agx_helper.load_shape('objects/simbot_simbot v1_bogie_1_Body1.obj')
 bogie_r_shape = agx_helper.load_shape('objects/simbot_simbot v1_bogie_r_1_Body1.obj')
@@ -170,6 +171,12 @@ class StairBot(agxSDK.Assembly):
             for body in body_group:
                 self.add(body)
 
+    def get_mass(self):
+        for bodies in self.bodies.keys():
+            print(bodies)
+            for body in self.bodies[bodies]:
+                print(f"{body.calculateMass():.3f} kg")
+
 class Controller:
     def __init__(self, constraints, speedIncrement):
         self.constraints = constraints
@@ -248,7 +255,48 @@ class MyKeyboardEvent(agxSDK.GuiEventListener):
             handled = True
         return handled
 
-class Plotter_Z(agxSDK.GuiEventListener):
-    def __init__(self):
+class TorqueLogger(agxSDK.StepEventListener):
+    def __init__(self, assembly):
         super().__init__()
-        pass
+        self.assembly = assembly
+        self.i = 0
+        self.prevTime = 0
+        self.prevAngMom = [x.getAngularMomentum()[0] for x in self.assembly.bodies["wheels"]]
+
+    def post(self, tt):
+        self.increment()
+        #if self.i%1==0:
+        self.get_torque(tt)
+
+    def get_torque(self, time):
+        AngMom = [x.getAngularMomentum()[0] for x in self.assembly.bodies["wheels"]]
+        dt = time - self.prevTime
+        for i in range(len(AngMom)):
+            torque = (AngMom[i]-self.prevAngMom[i])/dt
+            print(f"Wheel {i}: {torque:.6f} Nm")
+        self.prevTime = time
+        self.prevAngMom = AngMom
+
+    def increment(self):
+        self.i += 1
+
+
+class ForceLogger(agxSDK.StepEventListener):
+    def __init__(self, assembly):
+        super().__init__()
+        self.assembly = assembly
+        self.i = 0
+
+    def post(self, tt):
+        self.increment()
+        if self.i%5==0:
+            self.get_force()
+
+    def get_force(self):
+        for bodies in self.assembly.bodies.keys():
+            print(bodies)
+            for body in self.assembly.bodies[bodies]:
+                print(f"{body.getAngularMomentum():.4f} N")
+
+    def increment(self):
+        self.i += 1

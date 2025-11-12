@@ -6,7 +6,7 @@ import agxCollide
 import agxUtil
 import math
 
-from stairbot_V1 import StairBot, MyKeyboardEvent
+from stairbot_V1 import StairBot, MyKeyboardEvent, TorqueLogger, ForceLogger
 
 class SimulationEnvironment(agxSDK.Assembly):
     def __init__(self, app):
@@ -57,10 +57,12 @@ if __name__ == "__main__":
         app = agx_helper.AgxApp(num_threads=6)
         stairbot = StairBot(app)
         app.add(stairbot)
-        stairbot.setPosition(0, 0, 0.2)
+        stairbot.setPosition(-0.1, 0.1, 0.2)
         environment = SimulationEnvironment(app)
-        environment.add_stairs(height=0.025, depth=0.5, num_stairs=3)
-        FrictionSetter(app, stairbot, environment.plane_body, 0.9)
+        environment.add_stairs(height=0.03, depth=0.5, num_stairs=3)
+        FrictionSetter(app, stairbot, environment.plane_body, 1.00)
         app.init_camera(eye=agx.Vec3(1, 1, 0.5), center=stairbot.getPosition())
         app.add(MyKeyboardEvent(stairbot))
-        app.set_simulation_dt(0.01)
+        #app.add(TorqueLogger(stairbot))
+        #app.add(ForceLogger(stairbot))
+        app.set_simulation_dt(0.005)
