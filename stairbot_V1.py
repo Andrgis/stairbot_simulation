@@ -66,6 +66,7 @@ class StairBot(agxSDK.Assembly):
                        "wheelflaps": []}
 
         self.spawn_rover_geometry()
+        self.get_mass()
         self.motorize_wheels()
         self.add_to_sim()
 
@@ -79,6 +80,10 @@ class StairBot(agxSDK.Assembly):
                 self.app.create_visual(body, colors[i])
                 self.bodies[list(self.bodies.keys())[i]].append(body)
             i+=1
+
+        # specify masses
+        for b in self.bodies["rockers"] + self.bodies["chassis"]:
+            b.setCmLocalTranslate(agx.Vec3(0, -0.035, 0))
 
         # Joints
         jr0 = agx_helper.create_constraint(pos=r_pos[0],
@@ -146,9 +151,14 @@ class StairBot(agxSDK.Assembly):
         self.add(sj2)
         self.joints["wheelflaps"] += [sj1, sj3] #[sj0, sj1, sj2, sj3]
 
+        for j in self.joints["bogies"] + self.joints["rockers"]:
+            j.getRange1D().setEnable(True)
+            j.getRange1D().setRange(agx.RangeReal(-3.14 / 4, 3.14 / 4))
+
     def motorize_wheels(self):
         self.servo_pos = 0.0
         for j in self.joints["wheels"]:
+            j.setEnableComputeForces(True)
             j.setCompliance(1E-12)
             j.getMotor1D().setCompliance(1E-10)
             j.getMotor1D().setEnable(True)
@@ -253,6 +263,7 @@ class MyKeyboardEvent(agxSDK.GuiEventListener):
                 self.obj.servo_pos +=0.1
                 servo.getLock1D().setPosition(self.obj.servo_pos)
             handled = True
+        print(f"AngVel: {self.v} rads/s, Steer: {self.obj.servo_pos} rads")
         return handled
 
 class TorqueLogger(agxSDK.StepEventListener):
@@ -276,6 +287,29 @@ class TorqueLogger(agxSDK.StepEventListener):
             print(f"Wheel {i}: {torque:.6f} Nm")
         self.prevTime = time
         self.prevAngMom = AngMom
+
+class MotorTorqueLogger(agxSDK.StepEventListener):
+    def __init__(self, app, assembly):
+        super().__init__()
+        self.assembly = assembly
+        self.app = app
+        self.i = 0
+
+    def post(self, tt):
+        self.increment()
+        if self.i%10==0:
+            self.get_torque()
+            for i in range(len(self.torques)):
+                self.app.app.getSceneDecorator().setText(i, "Torque {}: {:3.2f} Ncm".format(i, self.torques[i]*100))
+
+    def get_torque(self):
+        self.torques = []
+        for wheel in self.assembly.joints["wheels"]:
+            # Get the current force and torque.
+            force = agx.Vec3()
+            torque = agx.Vec3()
+            wheel.getLastForce(0, force, torque)
+            self.torques.append(torque[0])
 
     def increment(self):
         self.i += 1
