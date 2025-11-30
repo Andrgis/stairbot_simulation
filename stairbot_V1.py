@@ -1,3 +1,5 @@
+import agxUtil
+
 import agx_helper
 import agx
 import agxSDK
@@ -6,6 +8,7 @@ import agxCollide
 import math
 
 
+backwheels_offset = 0.00
 chassis_shape = agx_helper.load_shape('objects/simbot_simbot v1_chasis_1_Body1.obj')
 bogie_l_shape = agx_helper.load_shape('objects/simbot_simbot v1_bogie_1_Body1.obj')
 bogie_r_shape = agx_helper.load_shape('objects/simbot_simbot v1_bogie_r_1_Body1.obj')
@@ -29,10 +32,10 @@ wheelflaps = (wheelflap_lm_shape, wheelflap_lf_shape, wheelflap_rm_shape, wheelf
 # joint positions:
 w_pos = (agx.Vec3(-64+44+5, 255, 55),
         agx.Vec3(-64+44+5, 55, 55),
-        agx.Vec3(-64, 455, 55),
+        agx.Vec3(-64, 455+backwheels_offset*1000, 55),
         agx.Vec3(-255, 255, 55),
         agx.Vec3(-255, 55, 55),
-        agx.Vec3(-206, 455, 55))
+        agx.Vec3(-206, 455+backwheels_offset*1000, 55))
 
 s_pos = (agx.Vec3(39, 255, 144.4-2),
         agx.Vec3(-39, 55, 144.4-2),
@@ -56,9 +59,9 @@ class StairBot(agxSDK.Assembly):
 
         self.bodies = {"chassis":[],
                        "bogies":[],
-                       "rockers":[],
                        "wheels":[],
-                       "wheelflaps":[]}
+                       "wheelflaps":[],
+                       "rockers":[]}
 
         self.joints = {"bogies": [],
                        "rockers": [],
@@ -71,8 +74,13 @@ class StairBot(agxSDK.Assembly):
         self.add_to_sim()
 
     def spawn_rover_geometry(self):
-        body_shapes = [[chassis_shape], bogies, rockers, wheels, wheelflaps]
-        colors = [agxRender.Color.Blue(), agxRender.Color.Red(), agxRender.Color.Yellow(), agxRender.Color.Black(), agxRender.Color.Green()]
+
+        material = agx.Material('material')
+        self.app.add(material)
+        material.getBulkMaterial().setDensity(4000)
+
+        body_shapes = [[chassis_shape], bogies, wheels, wheelflaps]
+        colors = [agxRender.Color.Blue(), agxRender.Color.Red(), agxRender.Color.Black(), agxRender.Color.Green()]
         i = 0
         for shapes in body_shapes:
             for shape in shapes:
@@ -81,9 +89,21 @@ class StairBot(agxSDK.Assembly):
                 self.bodies[list(self.bodies.keys())[i]].append(body)
             i+=1
 
+        agxUtil.setBodyMaterial(self.bodies["chassis"][0], material)
+        self.make_rockers(backwheels_offset)
+
+        #for b in self.bodies["rockers"]:
+            #b.setRotation(b.getRotation() + agx.Quat(0.7, 0.7, 0.0, 0.0))
+        #    b.setPosition(b.getPosition() + agx.Vec3(0.0, 0.0, 0.1))
+
+
+        #Offset back wheels
+        for b in [self.bodies["wheels"][2], self.bodies["wheels"][5]]:
+            b.setPosition(b.getPosition() + agx.Vec3(0.0, backwheels_offset, 0.0))
+
         # specify masses
         for b in self.bodies["rockers"] + self.bodies["chassis"]:
-            b.setCmLocalTranslate(agx.Vec3(0, -0.035, 0))
+            b.setCmLocalTranslate(agx.Vec3(0, -0.05, 0))
 
         # Joints
         jr0 = agx_helper.create_constraint(pos=r_pos[0],
@@ -158,7 +178,7 @@ class StairBot(agxSDK.Assembly):
     def motorize_wheels(self):
         self.servo_pos = 0.0
         for j in self.joints["wheels"]:
-            j.setEnableComputeForces(True)
+            j.setEnableComputeForces(False)
             j.setCompliance(1E-12)
             j.getMotor1D().setCompliance(1E-10)
             j.getMotor1D().setEnable(True)
@@ -187,53 +207,46 @@ class StairBot(agxSDK.Assembly):
             for body in self.bodies[bodies]:
                 print(f"{body.calculateMass():.3f} kg")
 
-class Controller:
-    def __init__(self, constraints, speedIncrement):
-        self.constraints = constraints
-        self.speedIncrement = speedIncrement
+    def make_rockers(self, offset):
+        w_r = [-9, 90 + offset*1000, -99]
+        b_r = [-14, -210, -59]
+        bog_roc = math.sqrt(47777)*0.001*1.05
+        w_roc = math.sqrt(9 ** 2 + (90 + offset*1000) ** 2 + 99 ** 2) * 0.001*1.05
 
-    # This will be manually called when a keyboard key is held down
-    def keyboard(self, keydown):
-        for v in self.constraints:
-            newSpeed = self.speedIncrement + v.getMotor1D().getSpeed()
-            v.getMotor1D().setSpeed(newSpeed)
+        af = math.atan2(b_r[2], b_r[1])
+        ab = math.atan2(w_r[2], w_r[1])
 
-class ConstraintOnOffController:
-    def __init__(self, actuators, shaft, enable):
-        self.actuators = actuators
-        self.enable = enable
-        self.shaft = shaft
-        # This will be manually called when a keyboard key is held down
-    def keyboard(self, keydown):
-        if keydown:
-            return
-        for v in self.actuators:
-            connected = v.isConnected(self.shaft)
-            if self.enable and not connected:
-                print("Enabling a motor")
-                done = v.connect(self.shaft)
-                hinge = v.getConstraint().asHinge()
-                if done: hinge.getMotor1D().setEnable(True)
-                hinge.getLock1D().setEnable(False)
-                break
-            elif not self.enable and connected:
-                done = v.disconnect(self.shaft)
-                if done:
-                    print("Disabling a motor")
-                    hinge = v.getConstraint().asHinge()
-                    hinge.getMotor1D().setEnable(False)
-                    hinge.getLock1D().setEnable(True)
-                    hinge.getLock1D().setPosition(hinge.getAngle())
-                break
+        rocker1 = agx.RigidBody()
+        rocker2 = agx.RigidBody()
+        rocf_shape = agxCollide.Box(0.001, bog_roc*0.5, 0.01)
+        rocb_shape = agxCollide.Box(0.001, w_roc*0.5, 0.01)
+        rocf_geom = agxCollide.Geometry(rocf_shape)
+        rocb_geom = agxCollide.Geometry(rocb_shape)
+        rocf_shape2 = agxCollide.Box(0.001, bog_roc * 0.5, 0.01)
+        rocb_shape2 = agxCollide.Box(0.001, w_roc * 0.5, 0.01)
+        rocf_geom2 = agxCollide.Geometry(rocf_shape2)
+        rocb_geom2 = agxCollide.Geometry(rocb_shape2)
 
-# Create a keyboard listener. Bind keys to the controllers
-class KeyListener(agxSDK.GuiEventListener):
-    def __init__(self, hinges, actuators, gearBoxShaft):
-        super().__init__(agxSDK.GuiEventListener.KEYBOARD)
-        self.keyTable = { agxSDK.GuiEventListener.KEY_Up: Controller(hinges, 0.5),
-                          agxSDK.GuiEventListener.KEY_Down: Controller(hinges, -0.5),
-                          agxSDK.GuiEventListener.KEY_Right: ConstraintOnOffController(actuators, gearBoxShaft, True),
-                          agxSDK.GuiEventListener.KEY_Left: ConstraintOnOffController(actuators, gearBoxShaft, False) } # Called when a keyboard is pressed def keyboard(self, key, modMask, x, y, keydown): speed = 10.0 # Is there a controller assigned to this key? if key in self.keyTable: self.keyTable[key].keyboard(keydown) # call the controller return True return False
+        rocf_geom.setPosition(b_pos[1] + (r_pos[1]-b_pos[1])*0.5)
+        rocf_geom.setRotation( agx.EulerAngles(af, 0, 0) )
+        rocb_geom.setPosition(w_pos[5] + (r_pos[1] - w_pos[5]) * 0.5)
+        rocb_geom.setRotation(agx.EulerAngles(ab, 0, 0))
+
+        rocf_geom2.setPosition(b_pos[0] + (r_pos[0] - b_pos[0]) * 0.5)
+        rocf_geom2.setRotation(agx.EulerAngles(af, 0, 0))
+        rocb_geom2.setPosition(w_pos[2] + (r_pos[0] - w_pos[2]) * 0.5)
+        rocb_geom2.setRotation(agx.EulerAngles(ab, 0, 0))
+
+        rocker1.add(rocf_geom)
+        rocker1.add(rocb_geom)
+        rocker2.add(rocf_geom2)
+        rocker2.add(rocb_geom2)
+
+        self.app.create_visual(rocker1, agxRender.Color.Yellow())
+        self.app.create_visual(rocker2, agxRender.Color.Yellow())
+
+        self.bodies["rockers"] += [rocker2, rocker1]
+
 
 class MyKeyboardEvent(agxSDK.GuiEventListener):
     def __init__(self, object: StairBot):
